@@ -5,7 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using SharpMath.FEM.Core;
+using SharpMath.FEM.Geometry;
 using SharpMath.FEM.Geometry._2D.Quad;
+using SharpMath.FEM.Geometry._2D.Quad.IO;
 using SharpMath.Geometry._2D;
 using SharpMath.Geometry.Splitting;
 
@@ -15,19 +17,12 @@ void ConfigureServices(IServiceCollection services)
         .SetBasePath(Directory.GetCurrentDirectory())
         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
         .Build();
-    services.AddSingleton(configuration);
+    var section = configuration.GetSection("GridApp");
+    services.AddSingleton<IConfiguration>(configuration.GetSection("GridApp"));
 
-    Log.Logger = new LoggerConfiguration()
-        .ReadFrom.Configuration(configuration)
-        .Enrich.FromLogContext()
-        .CreateLogger();
-    services.AddLogging(loggingBuilder =>
-        loggingBuilder.AddSerilog(dispose: true));
+    services.AddSingleton<IGridDefinitionProvider<RegularGridDefinition>, GridDefinitionReader>();
+    services.AddSingleton<RegularGridBuilder>();
 }
-
-// var services = new ServiceCollection();
-// ConfigureServices(services);
-// var provider = services.BuildServiceProvider();
 
 Grid<Point2D, IElement> TaskArea()
 {
@@ -68,19 +63,15 @@ string SerializeGrid(Grid<Point2D, IElement> grid)
     return json;
 }
 
-var gridBuilder = new RegularGridBuilder();
-var def = new RegularGridDefinition(
-    ControlPoints: new Point2D[,]
-    {
-        { new(0, 0), new (4, 0) },
-        { new(2, 2), new (4, 2) }
-    },
-    [new UniformSplitter(2)],
-    [new UniformSplitter(2)],
-    [new AreaDefinition(0, 1, 0, 1)], 
-    []);
+var services = new ServiceCollection();
+ConfigureServices(services);
+var provider = services.BuildServiceProvider();
 
-var grid = TaskArea();
+var gridReader = provider.GetRequiredService<IGridDefinitionProvider<RegularGridDefinition>>();
+var gridBuilder = provider.GetRequiredService<RegularGridBuilder>();
+
+var gridDefinition = gridReader.Get();
+var grid = gridBuilder.Build(gridDefinition);
 
 var str = SerializeGrid(grid);
 
