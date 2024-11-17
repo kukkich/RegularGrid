@@ -8,6 +8,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMath.Geometry", "..\Ma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMath.Primitives", "..\Math\SharpMath.Primitives\SharpMath.Primitives.csproj", "{45224582-D583-4D50-B7B1-4FCDBC0B53A0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMath", "..\Math\SharpMath\SharpMath.csproj", "{C1FBC634-FEB7-4161-A94D-75B3BE6C470D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMath.Tests", "..\Math\SharpMath.Tests\SharpMath.Tests.csproj", "{345558B6-EF1F-4307-A6C8-390106268E9F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +34,13 @@ Global
 		{45224582-D583-4D50-B7B1-4FCDBC0B53A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{45224582-D583-4D50-B7B1-4FCDBC0B53A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{45224582-D583-4D50-B7B1-4FCDBC0B53A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1FBC634-FEB7-4161-A94D-75B3BE6C470D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1FBC634-FEB7-4161-A94D-75B3BE6C470D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1FBC634-FEB7-4161-A94D-75B3BE6C470D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1FBC634-FEB7-4161-A94D-75B3BE6C470D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{345558B6-EF1F-4307-A6C8-390106268E9F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{345558B6-EF1F-4307-A6C8-390106268E9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{345558B6-EF1F-4307-A6C8-390106268E9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{345558B6-EF1F-4307-A6C8-390106268E9F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

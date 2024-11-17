@@ -29,6 +29,7 @@
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\..\Math\SharpMath.FEM\SharpMath.FEM.csproj" />
+      <ProjectReference Include="..\..\Math\SharpMath\SharpMath.csproj" />
     </ItemGroup>
 
 </Project>
