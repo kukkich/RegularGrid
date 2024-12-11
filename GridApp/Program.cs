@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Linq.Expressions;
+using System.Text.Json;
 using GridApp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,15 +14,16 @@ using SharpMath.FEM.Core;
 using SharpMath.FEM.Geometry;
 using SharpMath.FEM.Geometry._2D.Quad;
 using SharpMath.FEM.Geometry._2D.Quad.IO;
+using SharpMath.FiniteElement._2D;
 using SharpMath.FiniteElement._2D.Assembling;
 using SharpMath.FiniteElement._2D.BasisFunctions;
 using SharpMath.FiniteElement.Assembling;
 using SharpMath.FiniteElement.Assembling.Boundary.RegularGrid;
+using SharpMath.FiniteElement.Assembling.Parameters;
 using SharpMath.FiniteElement.Core.Assembling;
 using SharpMath.FiniteElement.Core.Assembling.Boundary.First;
 using SharpMath.FiniteElement.Core.Assembling.Boundary.Second;
 using SharpMath.FiniteElement.Materials.LambdaGamma;
-using SharpMath.FiniteElement.Materials.Providers;
 using SharpMath.FiniteElement.Providers.Density;
 using SharpMath.Geometry._2D;
 using SharpMath.Integration;
@@ -89,6 +92,8 @@ void ConfigureServices(IServiceCollection services)
     services.AddSingleton<EdgesPortraitBuilder>();
     services.AddSingleton<IElementEdgeResolver, QuadElementEdgeResolver>();
 
+    services.AddSingleton<DensityExpressionReader>();
+    services.AddSingleton<MaterialReader>();
     services.AddSingleton<RegularBoundaryReader>();
     services.AddSingleton<RegularGridBuilder>();
 
@@ -100,7 +105,7 @@ void ConfigureServices(IServiceCollection services)
     services.AddSingleton<QuadLinearNonScaledFunctions2DProvider>();
 
     services.AddSingleton<IIntegrator2D, Gauss2D>();
-    services.AddSingleton(GaussConfig.Gauss2(8));
+    services.AddSingleton(GaussConfig.Gauss4(8));
 }
 
 string SerializeGrid(Grid<Point2D, IElement> grid)
@@ -133,29 +138,33 @@ void Show(IEdgeResolver edgeResolver)
     Console.WriteLine($"Вершины ребра 54: {edgeResolver.GetNodesByEdge(54)}");
 }
 
+Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 var services = new ServiceCollection();
 ConfigureServices(services);
 var provider = services.BuildServiceProvider();
 
 var gridReader = provider.GetRequiredService<IGridDefinitionProvider<RegularGridDefinition>>();
 var boundaryReader = provider.GetRequiredService<RegularBoundaryReader>();
+var densityExpressionReader = provider.GetRequiredService<DensityExpressionReader>();
 var gridBuilder = provider.GetRequiredService<RegularGridBuilder>();
 var matrixPortraitBuilder = provider.GetRequiredService<SymmetricMatrixPortraitBuilder>();
 var elementEdgeResolver = provider.GetRequiredService<QuadElementEdgeResolver>();
 var edgesPortraitBuilder = provider.GetRequiredService<EdgesPortraitBuilder>();
 var integrator = provider.GetRequiredService<IIntegrator2D>();
+var materialReader = provider.GetRequiredService<MaterialReader>();
 var inserter = provider.GetRequiredService<IStackInserter<SymmetricSparseMatrix>>();
 var basicFunctions = provider.GetRequiredService<QuadLinearNonScaledFunctions2DProvider>();
 var slaeSolver = new ConjugateGradientSolver(
     new DiagonalPreconditionerFactory(),
-    1e-13,
-    4000
+    1e-14,
+    20000
 );
 
-var materialProvider = new FromArrayMaterialProvider<Material>([new Material(1, 10000)]);
+var materialProvider = materialReader.Get();
 
 var (boundary, expressions) = boundaryReader.Get();
 var gridDefinition = gridReader.Get();
+var density = (Expression<Func<Point2D, double>>)densityExpressionReader.GetDensity();
 var grid = gridBuilder.Build(gridDefinition);
 
 var matrix = matrixPortraitBuilder.Build(grid.Elements, grid.Nodes.TotalPoints);
@@ -170,16 +179,8 @@ var localAssembler = new QuadLinearAssembler2D(
     materialProvider,
     basicFunctions,
     basicFunctions,
-    new FuncDensity<Point2D, double>(grid.Nodes, p =>
-    {
-        var x = p.X;
-        var y = p.Y;
-        const double lambda = 1d;
-        const double gamma = 10000;
-        // return 0;
-        return gamma * (2 * x - 5 * y);
-        // return -lambda * (2d / 3 + 1) + gamma * (p.X * p.X / 3 + p.Y * p.Y - p.Y);
-    }));
+    new FuncDensity<Point2D, double>(grid.Nodes, density.Compile())
+    );
 var conditionApplier = new RegularBoundaryApplier<SymmetricSparseMatrix>(
     provider.GetRequiredService<IFirstBoundaryApplier<SymmetricSparseMatrix>>(),
     new SecondBoundaryApplier<SymmetricSparseMatrix>(grid.Nodes, inserter),
@@ -199,6 +200,7 @@ var equation = BuildEquation(
 );
 
 var resultEquation = slaeSolver.Solve(equation);
+var solution = new QuadLinearSolution(basicFunctions, grid, resultEquation);
 
 Equation<SymmetricSparseMatrix> BuildEquation(
     Grid<Point2D, IElement> grid,
@@ -235,10 +237,45 @@ Equation<SymmetricSparseMatrix> BuildEquation(
     return equation;
 }
 
-for (var i = 0; i < grid.Nodes.TotalPoints; i++)
+var uExpr = (Func<Point2D, double>)expressions[0].Compile();
+Func<double, double, double> U = (x, y) => uExpr(new Point2D(x, y));
+
+// for (var i = 0; i < grid.Nodes.TotalPoints; i++)
+// {
+//     var node = grid.Nodes[i];
+//     var actual = U(node.X, node.Y);
+//     var numeric = solution.Calculate(node);
+//     Console.WriteLine($"{node.X:F3} {node.Y:F3} {numeric:E5}");
+// }
+// SerializeGrid(grid);
+
+List<Point2D> testNodes = [
+    new Point2D(5+1d/3, 3+1d/3),
+    new Point2D(12+1d/3, 13 + 2d/3),
+    new Point2D(18+1d/3, 13 + 2d/3),
+    new Point2D(14+1d/3, 11 + 2d/3),
+    new Point2D(15+2d/3, 11 + 2d/3),
+    new Point2D(25+2d/3, 12 + 2d/3),
+];
+// List<Point2D> testNodes = [new Point2D(5+1d/3, 3+1d/3)];
+
+Console.WriteLine("------------------");
+
+foreach (var node in testNodes)
 {
-    Console.WriteLine($"({grid.Nodes[i].X:F3}, {grid.Nodes[i].Y:F3}) : {resultEquation[i]}");
+    var numeric = solution.Calculate(node);
+    var actual = U(node.X, node.Y);
+    Console.WriteLine($"{node.X:F3} {node.Y:F3} {actual:E15} {numeric:E15} {Math.Abs(numeric - actual):E15}");
 }
+//
+// Console.WriteLine("------------------");
+// for (var i = 0; i < grid.Nodes.TotalPoints; i++)
+// {
+//     var node = grid.Nodes[i];
+//     var numeric = solution.Calculate(node);
+//     var actual = U(node.X, node.Y);
+//     Console.WriteLine($"{node.X:F3} {node.Y:F3} {numeric:E15} {actual:E15} {Math.Abs(numeric - actual):E15}");
+// }
 
 // ShowGridIndexes(grid, edgeResolver);
 Console.WriteLine();
